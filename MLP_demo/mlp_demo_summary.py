@@ -10,6 +10,7 @@ class MyMLPNet:
     def __init__(self):
         self.x = tf.placeholder(dtype=tf.float32, shape=[None, 784])
         self.y = tf.placeholder(dtype=tf.float32, shape=[None, 10])
+        self.dp = tf.placeholder(tf.float32)
 
         self.W1 = tf.Variable(tf.truncated_normal([784, 512], dtype=tf.float32, stddev=tf.sqrt(1 / 512)))
         self.b1 = tf.Variable(tf.zeros([512]))
@@ -21,8 +22,10 @@ class MyMLPNet:
 
     def forword(self):
         self.y1 = tf.nn.sigmoid(tf.matmul(self.x, self.W1) + self.b1)
-        self.y2 = tf.nn.sigmoid(tf.matmul(self.y1, self.W2) + self.b2)
-        y_out = tf.matmul(self.y2, self.W3)
+        y1_dp = tf.nn.dropout(self.y1, keep_prob=self.dp)
+        self.y2 = tf.nn.sigmoid(tf.matmul(y1_dp, self.W2) + self.b2)
+        y2_dp = tf.nn.dropout(self.y2, keep_prob=self.dp)
+        y_out = tf.matmul(y2_dp, self.W3)
         tf.summary.histogram("y_out", y_out)
         self.y3 = tf.nn.softmax(y_out)
 
@@ -47,12 +50,13 @@ if __name__ == '__main__':
         for i in range(100000):
             xs, ys = mnist.train.next_batch(128)
             summary, loss, acc, _ = sess.run([merged, net.loss, net.accuracy, net.optimizer],
-                                    feed_dict={net.x: xs, net.y: ys})
+                                    feed_dict={net.x: xs, net.y: ys, net.dp: 0.8})
             writer.add_summary(summary, i)
             if i % 100 == 0:
                 print("loss: {0}, accuracy: {1}".format(loss, acc))
                 # test test network
-                test_xs, test_ys = mnist.train.next_batch(1)
-                test_result = sess.run([net.y3], feed_dict={net.x: test_xs})
+                # test_xs, test_ys = mnist.train.next_batch(1)
+                test_xs, test_ys = mnist.test.next_batch(1)
+                test_result = sess.run([net.y3], feed_dict={net.x: test_xs, net.dp: 1.0})
                 # print(type(test_result), type(test_ys))
                 print("label: {0}, test: {1}".format(np.argmax(test_ys), np.argmax(test_result)))

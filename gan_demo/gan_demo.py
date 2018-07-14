@@ -24,6 +24,7 @@ class GNet:
     def getParm(self):
         return tf.get_collection(tf.GraphKeys.VARIABLES, scope="gnet")
 
+
 class DNet:
 
     def __init__(self):
@@ -46,7 +47,7 @@ class DNet:
 class MyGANNet:
 
     def __init__(self):
-        self.real_x = tf.placeholder(dtype=tf.float32, shape=[None, 28, 28, 1])
+        self.real_x = tf.placeholder(dtype=tf.float32, shape=[None, 784])
         self.true_y = tf.placeholder(dtype=tf.float32, shape=[None, 1])
 
         self.gen_x = tf.placeholder(dtype=tf.float32, shape=[None, 100])
@@ -59,8 +60,7 @@ class MyGANNet:
         self.real_d_out = self.dnet.forward(self.real_x)
 
         self.gen_out = self.gnet.forward(self.gen_x)
-        self.gen_out = tf.reshape(self.gen_out, shape=[-1, 28, 28, 1])
-        self.gen_d_out = tf.dnet.forward(self.gen_out)
+        self.gen_d_out = self.dnet.forward(self.gen_out)
 
     def backward(self):
         self.d_loss = tf.reduce_mean((self.real_d_out - self.true_y) ** 2) \
@@ -81,3 +81,36 @@ if __name__ == '__main__':
     init = tf.global_variables_initializer()
     with tf.Session() as sess:
         sess.run(init)
+
+        plt.ion()
+        for epoch in range(100000):
+            xs, ys = mnist.train.next_batch(128)
+            true_ys = np.ones([128, 1])
+
+            gen_xs = np.random.uniform(-1, 1, (128, 100))
+            gen_ys = np.zeros([128, 1])
+            d_loss, _ = sess.run([net.d_loss, net.d_optimizer],
+                                 feed_dict={net.real_x: xs, net.true_y: true_ys, net.gen_x: gen_xs, net.false_y: gen_ys})
+
+
+            gen_xs_true = np.random.uniform(-1, 1, (128, 100))
+            gen_ys_true = np.ones([128, 1])
+            gen_out, g_loss_t, _ = sess.run([net.gen_out, net.gen_loss, net.gen_optimizer],
+                                   feed_dict={net.gen_x: gen_xs_true, net.true_y: gen_ys_true})
+
+            if epoch % 100 == 0:
+                print("d_loss: {0}, g_loss_t: {1}".format(d_loss, g_loss_t))
+                test_gen_xs = np.random.uniform(-1, 1, (1, 100))
+                test_gen_out = sess.run([net.gen_out], feed_dict={net.gen_x: test_gen_xs})
+                test_gen_out = np.reshape(test_gen_out[0], [28, 28])
+                plt.clf()
+                plt.subplot(221)
+                plt.imshow(test_gen_out)
+                print(test_gen_out)
+                plt.subplot(222)
+                plt.imshow(xs[0].reshape([28, 28]))
+                plt.subplot(223)
+                plt.imshow(gen_out[0].reshape([28, 28]))
+                # print(type(gen_out), np.shape(gen_out))
+                plt.pause(0.5)
+        plt.ioff()

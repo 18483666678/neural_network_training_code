@@ -1,0 +1,19 @@
+Author: lichen_zeng@sina.cn
+Date: 20180715
+Subject: My question about exclusive OR that compare with TF and numpy implements.
+
+Question 1:
+======
+In xor_use_numpy.py
+To calculate the l2_out output, it need the sigmoid activation.
+e.g.
+    l2_out = 1 / (1 + np.exp(-(np.dot(l1_out, w1))))
+
+but in xor_from_web.py and xor_demo.py
+To calculate the layer 2 output, it need not the sigmoid activation.
+and it need use the layer 2 output that without sigmoid activation to calculate the loss.
+e.g.
+    self.y2 = tf.matmul(self.y1, self.W2)
+    self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.y2, labels=self.y))
+
+Why???

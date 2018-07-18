@@ -1,3 +1,5 @@
 *~
 *.jpg
 __pycache__
+checkpoint*
+crack_capcha.model*

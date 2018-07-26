@@ -9,14 +9,33 @@ mnist = input_data.read_data_sets("../MNIST_data/", one_hot=True)
 class EncoderNet:
 
     def __init__(self):
-        self.w1 = tf.Variable(tf.truncated_normal(shape=[784, 512], stddev=0.1))
+        self.conv1_w = tf.Variable(
+            tf.truncated_normal([3, 3, 1, 16], dtype=tf.float32, stddev=0.1))
+        self.conv1_b = tf.Variable(tf.zeros([16]))
+
+        self.conv2_w = tf.Variable(
+            tf.truncated_normal([3, 3, 16, 32], dtype=tf.float32, stddev=0.1))
+        self.conv2_b = tf.Variable(tf.zeros([32]))
+
+        self.w1 = tf.Variable(tf.truncated_normal([7 * 7 * 32, 512], stddev=0.1))
         self.b1 = tf.Variable(tf.zeros([512]))
 
         self.logvar_w = tf.Variable(tf.truncated_normal(shape=[512, 128], stddev=0.1))
         self.mean_w = tf.Variable(tf.truncated_normal(shape=[512, 128], stddev=0.1))
 
     def forward(self, x):
-        y = tf.nn.relu(tf.matmul(x, self.w1) + self.b1)
+        x = tf.reshape(x, [-1, 28, 28, 1])
+        conv1 = tf.nn.leaky_relu(tf.nn.conv2d(x, self.conv1_w, strides=[1, 2, 2, 1],
+                                              padding='SAME') + self.conv1_b)
+        # conv1 = tf.nn.max_pool(conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1],
+        #                        padding='SAME')
+
+        conv2 = tf.nn.leaky_relu(
+            tf.nn.conv2d(conv1, self.conv2_w, strides=[1, 2, 2, 1], padding='SAME') + self.conv2_b)
+        # conv2 = tf.nn.max_pool(conv2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+
+        flat = tf.reshape(conv2, [-1, 7 * 7 * 32])
+        y = tf.nn.relu(tf.matmul(flat, self.w1) + self.b1)
 
         logVar = tf.matmul(y, self.logvar_w)
         mean = tf.matmul(y, self.mean_w)
@@ -27,15 +46,26 @@ class EncoderNet:
 class DecoderNet:
 
     def __init__(self):
-        self.w1 = tf.Variable(tf.truncated_normal(shape=[128, 512], stddev=0.1))
-        self.b1 = tf.Variable(tf.zeros([512]))
+        self.w1 = tf.Variable(tf.truncated_normal(shape=[128, 1024], stddev=0.1))
+        self.b1 = tf.Variable(tf.zeros([1024]))
 
-        self.w2 = tf.Variable(tf.truncated_normal(shape=[512, 784], stddev=0.1))
+        self.w2 = tf.Variable(tf.truncated_normal(shape=[1024, 32 * 7 * 7], stddev=0.1))
+        self.b2 = tf.Variable(tf.zeros([32 * 7 * 7]))
+        self.conv1_w = tf.Variable(tf.truncated_normal([3, 3, 16, 32], stddev=0.1, dtype=tf.float32))
+        self.conv2_w = tf.Variable(tf.truncated_normal([3, 3, 1, 16], stddev=0.1, dtype=tf.float32))
 
     def forward(self, x):
         y = tf.nn.leaky_relu(tf.matmul(x, self.w1) + self.b1)
-        y = tf.matmul(y, self.w2)
+        y = tf.nn.leaky_relu(tf.matmul(y, self.w2) + self.b2)
 
+        y = tf.reshape(y, [-1, 7, 7, 32])
+        deconv1 = tf.nn.leaky_relu(
+            tf.nn.conv2d_transpose(y, self.conv1_w, output_shape=[100, 14, 14, 16], strides=[1, 2, 2, 1],
+                                   padding='SAME'))
+        deconv2 = tf.nn.conv2d_transpose(deconv1, self.conv2_w, output_shape=[100, 28, 28, 1], strides=[1, 2, 2, 1],
+                                         padding='SAME')
+
+        y = tf.reshape(deconv2, [-1, 784])
         return y
 
 

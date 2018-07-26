@@ -84,6 +84,7 @@ class VAENet:
 
     def __init__(self):
         self.x = tf.placeholder(dtype=tf.float32, shape=[None, 784])
+        self.ns = tf.placeholder(dtype=tf.float32, shape=[None, 128])
 
         self.learning_rate = 0.0002
         self.beta1 = 0.5
@@ -98,6 +99,9 @@ class VAENet:
         self.std = tf.sqrt(tf.exp(self.logVar))
         y = self.std * noise + self.mean
         self.out = self.decoder.forward(y, is_training=True)
+
+        ns = self.std * self.ns + self.mean
+        self.test = self.decoder.forward(ns, is_training=False)
 
     def backward(self):
         out_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.out, labels=self.x))
@@ -125,8 +129,15 @@ if __name__ == '__main__':
 
             if epoch % 100 == 0:
                 print("epoch: {}, loss: {}".format(epoch, loss))
+                noise = np.random.uniform(0, 1, (100, 128))
+                test_out = sess.run(net.test, feed_dict={net.x: xs, net.ns: noise})
+                test_img = np.reshape(test_out[0], [28, 28])
                 img = np.reshape(out[0], [28, 28])
+
                 plt.clf()
+                plt.subplot(211)
+                plt.imshow(test_img)
+                plt.subplot(212)
                 plt.imshow(img)
                 plt.pause(0.5)
         plt.ioff()

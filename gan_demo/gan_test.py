@@ -10,28 +10,29 @@ class GNet:
 
     def __init__(self):
         with tf.variable_scope("gnet"):
-            self.w1 = tf.Variable(tf.truncated_normal(shape=[100, 128], stddev=0.1))
-            self.b1 = tf.Variable(tf.zeros([128]))
+            self.w1 = tf.Variable(tf.truncated_normal(shape=[128, 256], stddev=0.1))
+            self.b1 = tf.Variable(tf.zeros([256]))
 
-            self.w2 = tf.Variable(tf.truncated_normal(shape=[128, 784], stddev=0.1))
-    
+            self.w2 = tf.Variable(tf.truncated_normal(shape=[256, 512], stddev=0.1))
+            self.b2 = tf.Variable(tf.zeros([512]))
+
+            self.w3 = tf.Variable(tf.truncated_normal(shape=[512, 784], stddev=0.1))
+
     def forward(self, x):
-        y = tf.nn.relu(tf.matmul(x, self.w1) + self.b1)
-        y = tf.matmul(y, self.w2)
+        y = tf.nn.leaky_relu(tf.matmul(x, self.w1) + self.b1)
+        y = tf.nn.leaky_relu(tf.matmul(y, self.w2) + self.b2)
+        y = tf.matmul(y, self.w3)
 
         return y
 
     def getParam(self):
         return tf.get_collection(tf.GraphKeys.VARIABLES, scope="gnet")
 
+
 class DNet:
 
     def __init__(self):
         with tf.variable_scope("dnet"):
-            # self.w1 = tf.Variable(tf.truncated_normal(shape=[784, 128], stddev=0.1))
-            # self.b1 = tf.Variable(tf.zeros([128]))
-            # self.w2 = tf.Variable(tf.truncated_normal(shape=[128, 1], stddev=0.1))
-
             self.conv1_w = tf.Variable(
                 tf.truncated_normal([3, 3, 1, 16], dtype=tf.float32, stddev=0.1))
             self.conv1_b = tf.Variable(tf.zeros([16]))
@@ -46,12 +47,10 @@ class DNet:
             self.w2 = tf.Variable(tf.truncated_normal([128, 1], stddev=0.1))
 
     def forward(self, x):
-        # y = tf.nn.relu(tf.matmul(x, self.w1) + self.b1)
-        # y = tf.nn.sigmoid(tf.matmul(y, self.w2))
         conv1 = tf.nn.relu(tf.nn.conv2d(x, self.conv1_w, strides=[1, 1, 1, 1],
-                                             padding='SAME') + self.conv1_b)
+                                        padding='SAME') + self.conv1_b)
         pool1 = tf.nn.max_pool(conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1],
-                                    padding='SAME')
+                               padding='SAME')
 
         conv2 = tf.nn.relu(
             tf.nn.conv2d(pool1, self.conv2_w, strides=[1, 1, 1, 1], padding='SAME') + self.conv2_b)
@@ -77,7 +76,7 @@ class Net:
         self.r_x = tf.placeholder(dtype=tf.float32, shape=[None, 28, 28, 1])
         self.t_y = tf.placeholder(dtype=tf.float32, shape=[None, 1])
 
-        self.g_x = tf.placeholder(dtype=tf.float32, shape=[None, 100])
+        self.g_x = tf.placeholder(dtype=tf.float32, shape=[None, 128])
         self.f_y = tf.placeholder(dtype=tf.float32, shape=[None, 1])
 
         self.gnet = GNet()
@@ -93,14 +92,14 @@ class Net:
         self.g_out = tf.reshape(self.g_out, [-1, 28, 28, 1])
         self.g_d_out = self.dnet.forward(self.g_out)
 
-
     def backward(self):
-        self.d_loss = tf.reduce_mean((self.r_d_out - self.t_y) ** 2) \
-                      + tf.reduce_mean((self.g_d_out - self.f_y) ** 2)
+        self.d_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.r_d_out, labels=self.t_y)) \
+                      + tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.g_d_out, labels=self.f_y))
+
         tf.summary.scalar("Discriminator loss", self.d_loss)
         self.d_opt = tf.train.AdamOptimizer(0.0001).minimize(self.d_loss, var_list=self.dnet.getParam())
 
-        self.g_loss = tf.reduce_mean((self.g_d_out - self.t_y) ** 2)
+        self.g_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.g_d_out, labels=self.t_y))
         tf.summary.scalar("Generator loss", self.g_loss)
         self.g_opt = tf.train.AdamOptimizer(0.0001).minimize(self.g_loss, var_list=self.gnet.getParam())
 
@@ -116,38 +115,29 @@ if __name__ == '__main__':
 
         plt.ion()
         for epoch in range(100000):
-            t_xs, _ = mnist.train.next_batch(50)
-            t_xs = t_xs.reshape([50, 28, 28, 1])
-            t_ys = np.ones(shape=[50, 1])
-
-            f_xs = np.random.uniform(-1, 1, (50, 100))
-            f_ys = np.zeros(shape=[50, 1])
-
-            summary, _d_loss, _ = sess.run([merged, net.d_loss, net.d_opt],
-                                  feed_dict={net.r_x: t_xs, net.t_y: t_ys, net.g_x: f_xs, net.f_y: f_ys})
-
-            t_xs = np.random.uniform(-1, 1, (100, 100))
+            t_xs, _ = mnist.train.next_batch(100)
+            t_xs = t_xs.reshape([100, 28, 28, 1])
             t_ys = np.ones(shape=[100, 1])
+
+            f_xs = np.random.uniform(-1, 1, (100, 128))
+            f_ys = np.zeros(shape=[100, 1])
+
+            if epoch % 5 == 0:
+                summary, _d_loss, _ = sess.run([merged, net.d_loss, net.d_opt],
+                                               feed_dict={net.r_x: t_xs, net.t_y: t_ys, net.g_x: f_xs, net.f_y: f_ys})
+
             _g_loss, _ = sess.run([net.g_loss, net.g_opt],
-                                  feed_dict={net.g_x: t_xs, net.t_y: t_ys})
+                                  feed_dict={net.g_x: f_xs, net.t_y: t_ys})
 
             writer.add_summary(summary, epoch)
 
-            print("zeng>> ========", _d_loss, _g_loss)
-            if epoch % 1000 == 0:
-                t_xs = np.random.uniform(-1, 1, (1, 100))
-                imgs = sess.run(net.g_out, feed_dict={net.g_x: t_xs})
+            if epoch % 100 == 0:
+                print("epoch: {}, d_loss: {}, g_loss: {}".format(epoch, _d_loss, _g_loss))
+                test_xs = np.random.uniform(-1, 1, (1, 128))
+                imgs = sess.run(net.g_out, feed_dict={net.g_x: test_xs})
                 img = np.reshape(imgs[0], (28, 28))
-                print(img)
+                # print(img)
                 plt.clf()
                 plt.imshow(img)
                 plt.pause(1)
         plt.ioff()
-
-
-
-
-
-
-
-

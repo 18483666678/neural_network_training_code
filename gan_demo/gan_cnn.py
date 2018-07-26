@@ -10,20 +10,25 @@ class GNet:
 
     def __init__(self):
         with tf.variable_scope("gnet"):
-            self.w1 = tf.Variable(tf.truncated_normal(shape=[128, 256], stddev=0.1))
-            self.b1 = tf.Variable(tf.zeros([256]))
+            self.w1 = tf.Variable(tf.truncated_normal(shape=[128, 1024], stddev=0.1))
+            self.b1 = tf.Variable(tf.zeros([1024]))
 
-            self.w2 = tf.Variable(tf.truncated_normal(shape=[256, 512], stddev=0.1))
-            self.b2 = tf.Variable(tf.zeros([512]))
-
-            self.w3 = tf.Variable(tf.truncated_normal(shape=[512, 784], stddev=0.1))
+            self.w2 = tf.Variable(tf.truncated_normal(shape=[1024, 32 * 7 * 7], stddev=0.1))
+            self.b2 = tf.Variable(tf.zeros([32 * 7 * 7]))
+            self.conv1_w = tf.Variable(tf.truncated_normal([3, 3, 16, 32], stddev=0.1, dtype=tf.float32))
+            self.conv2_w = tf.Variable(tf.truncated_normal([3, 3, 1, 16], stddev=0.1, dtype=tf.float32))
 
     def forward(self, x):
         y = tf.nn.leaky_relu(tf.matmul(x, self.w1) + self.b1)
         y = tf.nn.leaky_relu(tf.matmul(y, self.w2) + self.b2)
-        y = tf.matmul(y, self.w3)
 
-        return y
+        y = tf.reshape(y, [-1, 7, 7, 32])
+        deconv1 = tf.nn.conv2d_transpose(y, self.conv1_w, output_shape=[100, 14, 14, 16], strides=[1, 2, 2, 1],
+                                         padding='SAME')
+        deconv2 = tf.nn.conv2d_transpose(deconv1, self.conv2_w, output_shape=[100, 28, 28, 1], strides=[1, 2, 2, 1],
+                                         padding='SAME')
+
+        return deconv2
 
     def getParam(self):
         return tf.get_collection(tf.GraphKeys.VARIABLES, scope="gnet")
@@ -89,7 +94,7 @@ class Net:
         self.r_d_out = self.dnet.forward(self.r_x)
 
         self.g_out = self.gnet.forward(self.g_x)
-        self.g_out = tf.reshape(self.g_out, [-1, 28, 28, 1])
+        print("g_out shape: ", self.g_out.shape)
         self.g_d_out = self.dnet.forward(self.g_out)
 
     def backward(self):
@@ -114,7 +119,7 @@ if __name__ == '__main__':
         writer = tf.summary.FileWriter("./logs", sess.graph)
 
         plt.ion()
-        for epoch in range(100000):
+        for epoch in range(10000000):
             t_xs, _ = mnist.train.next_batch(100)
             t_xs = t_xs.reshape([100, 28, 28, 1])
             t_ys = np.ones(shape=[100, 1])
@@ -126,15 +131,15 @@ if __name__ == '__main__':
                 summary, _d_loss, _ = sess.run([merged, net.d_loss, net.d_opt],
                                                feed_dict={net.r_x: t_xs, net.t_y: t_ys, net.g_x: f_xs, net.f_y: f_ys})
 
-            _g_loss, _ = sess.run([net.g_loss, net.g_opt],
-                                  feed_dict={net.g_x: f_xs, net.t_y: t_ys})
+            imgs, _g_loss, _ = sess.run([net.g_out, net.g_loss, net.g_opt],
+                                        feed_dict={net.g_x: f_xs, net.t_y: t_ys})
 
             writer.add_summary(summary, epoch)
 
             if epoch % 100 == 0:
                 print("epoch: {}, d_loss: {}, g_loss: {}".format(epoch, _d_loss, _g_loss))
-                test_xs = np.random.uniform(-1, 1, (1, 128))
-                imgs = sess.run(net.g_out, feed_dict={net.g_x: test_xs})
+                # test_xs = np.random.uniform(-1, 1, (100, 128))
+                # imgs = sess.run(net.g_out, feed_dict={net.g_x: test_xs})
                 img = np.reshape(imgs[0], (28, 28))
                 # print(img)
                 plt.clf()

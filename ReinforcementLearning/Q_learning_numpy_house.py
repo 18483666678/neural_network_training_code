@@ -3,6 +3,18 @@
 #
 # Q(state, action) = R(state, action) + Gamma * Max[Q(next state, all actions)]
 import numpy as np
+import pandas as pd
+
+# rewards = pd.DataFrame(
+#     [[-1, -1, -1, -1, 0, -1],
+#      [-1, -1, -1, 0, -1, 100],
+#      [-1, -1, -1, 0, -1, -1],
+#      [-1, 0, 0, -1, 0, -1],
+#      [0, -1, -1, 0, -1, 100],
+#      [-1, 0, -1, -1, 0, 100]], index=['a', 'b', 'c', 'd', 'e', 'f'], columns=[0, 1, 2, 3, 4, 5]
+# )
+# print(rewards)
+# print(rewards[5]['b'])  # [columns][index]
 
 rewards = np.array(
     [[-1, -1, -1, -1, 0, -1],
@@ -42,7 +54,9 @@ for epoch in range(10000):
         q_table[state, action] = q_val
 
         if epoch % 1000 == 0:
-            print(np.array(np.round(q_table / 5), dtype=np.int32))
+            print("epoch: {}, state: {}, action: {}, reward: {}".format(epoch, state, action, reward))
+            print(pd.DataFrame(np.round(q_table / 5), index=[0, 1, 2, 3, 4, 5], columns=[0, 1, 2, 3, 4, 5],
+                               dtype=np.int32))
 
         state = action
         if state == 5:

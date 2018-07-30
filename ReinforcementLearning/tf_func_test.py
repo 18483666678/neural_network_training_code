@@ -28,6 +28,7 @@ x = tf.constant([[0.9], [2.5], [2.3], [1.5], [-4.5]])
 y = tf.round(x)  # [ [1.0], [2.0], [2.0], [2.0], [-4.0] ]
 y = tf.abs(y)  # [ [1.0], [2.0], [2.0], [2.0], [4.0] ]
 y = tf.cast(y, tf.int32)  # [ [1], [2], [2], [2], [4] ]
+y_div = tf.cast(y % 3, tf.int32)  # [ [1], [2], [2], [2], [1] ]
 
 print(y)
 init = tf.global_variables_initializer()
@@ -40,3 +41,4 @@ with tf.Session() as sess:
     print(sess.run(exp_val))
     print("###### cast ######")
     print(sess.run(y))
+    print(sess.run(y_div))

@@ -222,7 +222,7 @@ if __name__ == '__main__':
         batch_size = 20
 
         explore = 0.1
-        for k in range(1):
+        for k in range(10000):
             idxs, experiences = game.get_experiences(batch_size)
 
             # print(idxs)
@@ -243,7 +243,7 @@ if __name__ == '__main__':
 
             # print(observations, "\n", rewards, "\n", actions, "\n", next_observations, "\n", dones)
             if k % 10 == 0:
-                print("-------------------------------------- copy param -----------------------------------")
+                # print("--------- copy param ---------")
                 sess.run(copy_op)
                 # time.sleep(2)
 
@@ -260,31 +260,33 @@ if __name__ == '__main__':
                 net.action: actions,
             })
 
-        explore -= 0.0001
-        if explore < 0.0001:
-            explore = 0.0001
-        print("episode:{}, c_loss: {}, a_loss: {}, explore: {}".format(k, c_loss, a_loss, explore))
+            explore -= 0.0001
+            if explore < 0.0001:
+                explore = 0.0001
 
-        count = 0
-        run_observation = game.reset()
-        for idx in idxs:
             if k % 100 == 0:
-                print("{} ==>".format(run_observation), end="")
+                print("episode:{}, c_loss: {}, a_loss: {}, explore: {}".format(k, c_loss, a_loss, explore))
 
-            if np.random.rand() < explore:
-                run_action = np.random.randint(0, 6)
-            else:
-                run_action = sess.run(run_action_op, feed_dict={
-                    net.observation: [[run_observation]]
-                })[0]
-
-            run_next_observation, run_reward, run_done = run_action, game_rewards[
-                run_observation, run_action], run_action == 5
-
-            game.experience_pool[idx] = [run_observation, run_reward, run_action, run_next_observation, run_done]
-            if run_done:
-                run_observation = game.reset()
+            count = 0
+            run_observation = game.reset()
+            for idx in idxs:
                 if k % 100 == 0:
-                    print("5")
-            else:
-                run_observation = run_next_observation
+                    print("{} ==>".format(run_observation), end="")
+
+                if np.random.rand() < explore:
+                    run_action = np.random.randint(0, 6)
+                else:
+                    run_action = sess.run(run_action_op, feed_dict={
+                        net.observation: [[run_observation]]
+                    })[0]
+
+                run_next_observation, run_reward, run_done = run_action, game_rewards[
+                    run_observation, run_action], run_action == 5
+
+                game.experience_pool[idx] = [run_observation, run_reward, run_action, run_next_observation, run_done]
+                if run_done:
+                    run_observation = game.reset()
+                    if k % 100 == 0:
+                        print("5")
+                else:
+                    run_observation = run_next_observation

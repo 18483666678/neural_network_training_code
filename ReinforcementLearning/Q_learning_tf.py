@@ -187,7 +187,7 @@ if __name__ == '__main__':
             count = 0
             run_observation = game.reset()
             for idx in idxs:
-                if k > 200:
+                if k % 100 == 0:
                     # game.render()
                     print("{} ==>".format(run_observation), end="")
 
@@ -208,7 +208,7 @@ if __name__ == '__main__':
                 if run_done:
                     run_observation = game.reset()
                     count += 1
-                    if k > 200:
+                    if k % 100 == 0:
                         print("5")
                 else:
                     run_observation = run_next_observation

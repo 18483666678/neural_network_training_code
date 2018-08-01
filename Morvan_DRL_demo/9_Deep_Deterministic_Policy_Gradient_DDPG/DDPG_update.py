@@ -34,6 +34,7 @@ ENV_NAME = 'Pendulum-v0'
 
 class DDPG(object):
     def __init__(self, a_dim, s_dim, a_bound, ):
+        # shape(self.memory) : [10000, 3 * 2 + 1 + 1]
         self.memory = np.zeros((MEMORY_CAPACITY, s_dim * 2 + a_dim + 1), dtype=np.float32)
         self.pointer = 0
         self.sess = tf.Session()
@@ -118,8 +119,17 @@ env = env.unwrapped
 env.seed(1)
 
 s_dim = env.observation_space.shape[0]
+# print(s_dim)  # 3
+# print(env.observation_space.shape)  # (3,)
+# print(env.observation_space)  # Box(3,)
+
 a_dim = env.action_space.shape[0]
+# print(a_dim)  # 1
+# print(env.action_space.shape)  # (1,)
+# print(env.action_space)  # Box(1,)
+
 a_bound = env.action_space.high
+# print(a_bound)  # [2.]
 
 ddpg = DDPG(a_dim, s_dim, a_bound)
 
@@ -127,6 +137,7 @@ var = 3  # control exploration
 t1 = time.time()
 for i in range(MAX_EPISODES):
     s = env.reset()
+    # print(s)  # e.g.: [-0.35283079  0.93568715  0.02900014]
     ep_reward = 0
     for j in range(MAX_EP_STEPS):
         if RENDER:
@@ -147,6 +158,7 @@ for i in range(MAX_EPISODES):
         ep_reward += r
         if j == MAX_EP_STEPS - 1:
             print('Episode:', i, ' Reward: %i' % int(ep_reward), 'Explore: %.2f' % var, )
-            # if ep_reward > -300:RENDER = True
+            if ep_reward > -300:
+                RENDER = True
             break
 print('Running time: ', time.time() - t1)

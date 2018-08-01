@@ -3,6 +3,17 @@ import gym
 import numpy as np
 import time
 
+game_rewards = np.array(
+    [[-100, -100, -100, -100, 0, -100],
+     [-100, -100, -100, 0, -100, 100],
+     [-100, -100, -100, 0, -100, -100],
+     [-100, 0, 0, -100, 0, -100],
+     [0, -100, -100, 0, -100, 100],
+     [-100, 0, -100, -100, 0, 100]]
+)
+GAMMA = 0.9  # reward discount
+TAU = 0.01  # soft replacement
+
 
 class QNet:
 
@@ -18,14 +29,15 @@ class QNet:
             self.a_b3 = tf.Variable(tf.zeros([6]))
 
         with tf.variable_scope("CriticNet"):
-            self.c_w1 = tf.Variable(tf.truncated_normal([6, 30], stddev=0.1))
+            self.cc_w1 = tf.Variable(tf.truncated_normal([6, 30], stddev=0.1))
+            self.ca_w1 = tf.Variable(tf.truncated_normal([6, 30], stddev=0.1))
             self.c_b1 = tf.Variable(tf.zeros([30]))
 
             self.c_w2 = tf.Variable(tf.truncated_normal([30, 30], stddev=0.1))
             self.c_b2 = tf.Variable(tf.zeros([30]))
 
-            self.c_w3 = tf.Variable(tf.truncated_normal([30, 6], stddev=0.1))
-            self.c_b3 = tf.Variable(tf.zeros([6]))
+            self.c_w3 = tf.Variable(tf.truncated_normal([30, 1], stddev=0.1))
+            self.c_b3 = tf.Variable(tf.zeros([1]))
 
     def actor_forward(self, observation):
         y = tf.nn.relu(tf.matmul(observation, self.a_w1) + self.a_b1)
@@ -39,8 +51,8 @@ class QNet:
 
         return y
 
-    def critic_forward(self, observation):
-        y = tf.nn.relu(tf.matmul(observation, self.c_w1) + self.c_b1)
+    def critic_forward(self, observation, action):
+        y = tf.nn.relu(tf.matmul(observation, self.cc_w1) + tf.matmul(action, self.ca_w1) + self.c_b1)
         y = tf.nn.relu(tf.matmul(y, self.c_w2) + self.c_b2)
         y = tf.matmul(y, self.c_w3) + self.c_b3
 
@@ -68,14 +80,15 @@ class TargetQNet:
             self.a_b3 = tf.Variable(tf.zeros([6]))
 
         with tf.variable_scope("CriticNet"):
-            self.c_w1 = tf.Variable(tf.truncated_normal([6, 30], stddev=0.1))
+            self.cc_w1 = tf.Variable(tf.truncated_normal([6, 30], stddev=0.1))
+            self.ca_w1 = tf.Variable(tf.truncated_normal([6, 30], stddev=0.1))
             self.c_b1 = tf.Variable(tf.zeros([30]))
 
             self.c_w2 = tf.Variable(tf.truncated_normal([30, 30], stddev=0.1))
             self.c_b2 = tf.Variable(tf.zeros([30]))
 
-            self.c_w3 = tf.Variable(tf.truncated_normal([30, 6], stddev=0.1))
-            self.c_b3 = tf.Variable(tf.zeros([6]))
+            self.c_w3 = tf.Variable(tf.truncated_normal([30, 1], stddev=0.1))
+            self.c_b3 = tf.Variable(tf.zeros([1]))
 
     def actor_forward(self, observation):
         y = tf.nn.relu(tf.matmul(observation, self.a_w1) + self.a_b1)
@@ -89,8 +102,8 @@ class TargetQNet:
 
         return y
 
-    def critic_forward(self, observation):
-        y = tf.nn.relu(tf.matmul(observation, self.c_w1) + self.c_b1)
+    def critic_forward(self, observation, action):
+        y = tf.nn.relu(tf.matmul(observation, self.cc_w1) + tf.matmul(action, self.ca_w1) + self.c_b1)
         y = tf.nn.relu(tf.matmul(y, self.c_w2) + self.c_b2)
         y = tf.matmul(y, self.c_w3) + self.c_b3
 
@@ -118,74 +131,54 @@ class Net:
 
     def forward(self, discount):
         observ = tf.squeeze(tf.one_hot(self.observation, 6), axis=1)
-        self.pre_qs = self.qNet.critic_forward(observ)
-        self.pre_q = tf.expand_dims(
-            tf.reduce_sum(tf.multiply(tf.squeeze(tf.one_hot(self.action, 6), axis=1), self.pre_qs), axis=1), axis=1)
+        action = tf.squeeze(tf.one_hot(self.action, 6), axis=1)
+        self.pre_q = self.qNet.critic_forward(observ, action)
 
         self.pre_action = self.qNet.actor_forward(observ)
         self.pre_action = tf.expand_dims(self.pre_action, axis=1)
-        self.pre_q_a = tf.expand_dims(
-            tf.reduce_sum(tf.multiply(tf.squeeze(tf.one_hot(self.pre_action, 6), axis=1), self.pre_qs), axis=1), axis=1)
+        self.pre_action = tf.squeeze(tf.one_hot(self.pre_action, 6), axis=1)
+        self.pre_a_q = self.qNet.critic_forward(observ, self.pre_action)
 
         next_observ = tf.squeeze(tf.one_hot(self.next_observation, 6), axis=1)
         self.next_action = self.targetQNet.actor_forward(next_observ)
         self.next_action = tf.expand_dims(self.next_action, axis=1)
-        self.next_qs = self.targetQNet.critic_forward(next_observ)
-        self.next_q_a = tf.expand_dims(
-            tf.reduce_sum(tf.multiply(tf.squeeze(tf.one_hot(self.next_action, 6), axis=1), self.next_qs), axis=1),
-            axis=1)
+        self.next_action = tf.squeeze(tf.one_hot(self.next_action, 6), axis=1)
+        self.next_a_q = self.targetQNet.critic_forward(next_observ, self.next_action)
 
-        self.target_q = tf.where(self.done, self.reward, self.reward + discount * self.next_q_a)
+        self.target_q = tf.where(self.done, self.reward, self.reward + discount * self.next_a_q)
 
     def play(self):
         observ = tf.squeeze(tf.one_hot(self.observation, 6), axis=1)
-        self.qs = self.qNet.critic_forward(observ)
-        return tf.argmax(self.qs, axis=1)
+        act = self.qNet.actor_forward(observ)
+        return act
 
     def backward(self):
         self.critic_loss = tf.reduce_mean((self.target_q - self.pre_q) ** 2)
-        self.critic_opt = tf.train.RMSPropOptimizer(0.01).minimize(self.critic_loss,
-                                                                   var_list=self.qNet.getParams("CriticNet"))
+        self.critic_opt = tf.train.AdamOptimizer(0.002).minimize(self.critic_loss,
+                                                                 var_list=self.qNet.getParams("CriticNet"))
 
-        self.actor_loss = tf.reduce_mean(tf.multiply(tf.cast(self.pre_action, tf.float32), self.pre_q_a))
-        self.actor_opt = tf.train.RMSPropOptimizer(0.01).minimize(self.actor_loss,
-                                                                  var_list=self.qNet.getParams("ActorNet"))
+        self.actor_loss = - tf.reduce_mean(self.pre_a_q)
+        self.actor_opt = tf.train.AdamOptimizer(0.001).minimize(self.actor_loss,
+                                                                var_list=self.qNet.getParams("ActorNet"))
 
+    # (1 - TAU) * ta + TAU * ea
     def copy_params(self):
         return [
-            tf.assign(self.targetQNet.a_w1, self.qNet.a_w1),
-            tf.assign(self.targetQNet.a_w2, self.qNet.a_w2),
-            tf.assign(self.targetQNet.a_w3, self.qNet.a_w3),
-            tf.assign(self.targetQNet.a_b1, self.qNet.a_b1),
-            tf.assign(self.targetQNet.a_b2, self.qNet.a_b2),
-            tf.assign(self.targetQNet.a_b3, self.qNet.a_b3),
+            tf.assign(self.targetQNet.a_w1, (1 - TAU) * self.targetQNet.a_w1 + TAU * self.qNet.a_w1),
+            tf.assign(self.targetQNet.a_w2, (1 - TAU) * self.targetQNet.a_w2 + TAU * self.qNet.a_w2),
+            tf.assign(self.targetQNet.a_w3, (1 - TAU) * self.targetQNet.a_w3 + TAU * self.qNet.a_w3),
+            tf.assign(self.targetQNet.a_b1, (1 - TAU) * self.targetQNet.a_b1 + TAU * self.qNet.a_b1),
+            tf.assign(self.targetQNet.a_b2, (1 - TAU) * self.targetQNet.a_b2 + TAU * self.qNet.a_b2),
+            tf.assign(self.targetQNet.a_b3, (1 - TAU) * self.targetQNet.a_b3 + TAU * self.qNet.a_b3),
 
-            tf.assign(self.targetQNet.c_w1, self.qNet.c_w1),
-            tf.assign(self.targetQNet.c_w2, self.qNet.c_w2),
-            tf.assign(self.targetQNet.c_w3, self.qNet.c_w3),
-            tf.assign(self.targetQNet.c_b1, self.qNet.c_b1),
-            tf.assign(self.targetQNet.c_b2, self.qNet.c_b2),
-            tf.assign(self.targetQNet.c_b3, self.qNet.c_b3),
+            tf.assign(self.targetQNet.cc_w1, (1 - TAU) * self.targetQNet.cc_w1 + TAU * self.qNet.cc_w1),
+            tf.assign(self.targetQNet.ca_w1, (1 - TAU) * self.targetQNet.ca_w1 + TAU * self.qNet.ca_w1),
+            tf.assign(self.targetQNet.c_w2, (1 - TAU) * self.targetQNet.c_w2 + TAU * self.qNet.c_w2),
+            tf.assign(self.targetQNet.c_w3, (1 - TAU) * self.targetQNet.c_w3 + TAU * self.qNet.c_w3),
+            tf.assign(self.targetQNet.c_b1, (1 - TAU) * self.targetQNet.c_b1 + TAU * self.qNet.c_b1),
+            tf.assign(self.targetQNet.c_b2, (1 - TAU) * self.targetQNet.c_b2 + TAU * self.qNet.c_b2),
+            tf.assign(self.targetQNet.c_b3, (1 - TAU) * self.targetQNet.c_b3 + TAU * self.qNet.c_b3),
         ]
-
-
-game_rewards = np.array(
-    [[-100, -100, -100, -100, 0, -100],
-     [-100, -100, -100, 0, -100, 100],
-     [-100, -100, -100, 0, -100, -100],
-     [-100, 0, 0, -100, 0, -100],
-     [0, -100, -100, 0, -100, 100],
-     [-100, 0, -100, -100, 0, 100]]
-)
-# game_rewards = np.array(
-#     [[-1, -1, -1, -1, 0, -1],
-#      [-1, -1, -1, 0, -1, 100],
-#      [-1, -1, -1, 0, -1, -1],
-#      [-1, 0, 0, -1, 0, -1],
-#      [0, -1, -1, 0, -1, 100],
-#      [-1, 0, -1, -1, 0, 100]]
-# )
-gamma = 0.8
 
 
 class Game:
@@ -194,10 +187,10 @@ class Game:
         self.experience_pool = []
         self.observation = np.random.choice(6)
 
-        for i in range(1000):
+        for i in range(10000):
             action = np.random.choice(6)
             next_observation, reward, done = action, game_rewards[self.observation, action], action == 5
-            self.experience_pool.append([self.observation, reward, action, next_observation, done])
+            self.experience_pool.append([self.observation, reward / 100, action, next_observation, done])
             if done:
                 self.observation = np.random.choice(6)
             else:
@@ -224,7 +217,7 @@ if __name__ == '__main__':
     game = Game()
 
     net = Net()
-    net.forward(gamma)
+    net.forward(GAMMA)
     net.backward()
     copy_op = net.copy_params()
     run_action_op = net.play()
@@ -270,21 +263,19 @@ if __name__ == '__main__':
                 net.done: dones
             })
 
-            pre_action, pre_q_a, a_loss, _ = sess.run([net.pre_action, net.pre_q_a, net.actor_loss, net.actor_opt],
-                                                      feed_dict={
-                                                          net.observation: observations,
-                                                      })
+            a_loss, _ = sess.run([net.actor_loss, net.actor_opt],
+                                 feed_dict={
+                                     net.observation: observations,
+                                 })
 
             explore -= 0.0001
             if explore < 0.0001:
                 explore = 0.0001
 
             if k % 100 == 0:
-                # print("\npre_action:\n", pre_action)
-                # print("\npre_q_a:\n", pre_q_a)
                 print("episode:{}, c_loss: {}, a_loss: {}, explore: {}".format(k, c_loss, a_loss, explore))
 
-            count = 0
+            ep_reward = 0
             run_observation = game.reset()
             for idx in idxs:
                 if k % 100 == 0:
@@ -300,10 +291,13 @@ if __name__ == '__main__':
                 run_next_observation, run_reward, run_done = run_action, game_rewards[
                     run_observation, run_action], run_action == 5
 
-                game.experience_pool[idx] = [run_observation, run_reward, run_action, run_next_observation, run_done]
+                game.experience_pool[idx] = [run_observation, run_reward / 100, run_action, run_next_observation,
+                                             run_done]
+                ep_reward += run_reward / 100
                 if run_done:
                     run_observation = game.reset()
                     if k % 100 == 0:
                         print("5")
+                        print("current episode reward: ", ep_reward)
                 else:
                     run_observation = run_next_observation

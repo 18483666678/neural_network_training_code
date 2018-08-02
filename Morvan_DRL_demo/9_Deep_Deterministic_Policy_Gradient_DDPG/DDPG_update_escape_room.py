@@ -24,7 +24,7 @@ LR_C = 0.002  # learning rate for critic
 GAMMA = 0.9  # reward discount
 TAU = 0.01  # soft replacement
 MEMORY_CAPACITY = 10000
-BATCH_SIZE = 32
+BATCH_SIZE = 200
 
 RENDER = False
 ENV_NAME = 'Pendulum-v0'
@@ -48,7 +48,7 @@ class Game:
         for i in range(10000):
             action = np.random.choice(6)
             next_observation, reward, done = action, game_rewards[self.observation, action], action == 5
-            self.experience_pool.append([self.observation, reward / 100, action, next_observation, done])
+            self.experience_pool.append([self.observation, reward / 200, action, next_observation, done])
             if done:
                 self.observation = np.random.choice(6)
             else:
@@ -89,12 +89,13 @@ class DDPG(object):
         with tf.variable_scope('Actor'):
             self.a = self._build_a(self.S, scope='eval', trainable=True)
             self.action = tf.argmax(self.a, axis=1, name='scaled_a')
+            self.act = tf.reduce_max(self.a, axis=1)
             a_ = self._build_a(self.S_, scope='target', trainable=False)
             # print(self.a, a_)
         with tf.variable_scope('Critic'):
             # assign self.a = a in memory when calculating q for td_error,
             # otherwise the self.a is from Actor when updating Actor
-            q = self._build_c(self.S, self.a, scope='eval', trainable=True)
+            self.q = self._build_c(self.S, self.a, scope='eval', trainable=True)
             q_ = self._build_c(self.S_, a_, scope='target', trainable=False)
             # print(q, q_)
 
@@ -111,10 +112,10 @@ class DDPG(object):
 
         q_target = tf.where(self.done, self.R, self.R + GAMMA * q_)
         # in the feed_dic for the td_error, the self.a should change to actions in memory
-        self.td_error = tf.losses.mean_squared_error(labels=q_target, predictions=q)
+        self.td_error = tf.losses.mean_squared_error(labels=q_target, predictions=self.q)
         self.ctrain = tf.train.AdamOptimizer(LR_C).minimize(self.td_error, var_list=self.ce_params)
 
-        self.a_loss = - tf.reduce_mean(q)  # maximize the q
+        self.a_loss = - tf.reduce_mean(tf.multiply(self.act, self.q))  # maximize the q
         self.atrain = tf.train.AdamOptimizer(LR_A).minimize(self.a_loss, var_list=self.ae_params + self.ce_params)
 
         self.sess.run(tf.global_variables_initializer())
@@ -144,11 +145,11 @@ class DDPG(object):
         ba = np.array(ba)
         ba_one_hot[np.arange(BATCH_SIZE), ba[:, 0]] = 1
 
-        a_loss, _ = self.sess.run([self.a_loss, self.atrain], {self.S: bs})
+        a_loss, action, quality, _ = self.sess.run([self.a_loss, self.a, self.q, self.atrain], {self.S: bs})
         c_loss, _ = self.sess.run([self.td_error, self.ctrain],
                                   {self.S: bs, self.a: ba_one_hot, self.R: br, self.S_: bs_, self.done: bd})
 
-        return a_loss, c_loss
+        return a_loss, c_loss, action, quality
 
     def store_transition(self, s, a, r, s_):
         transition = np.hstack(([s], [a], [r], [s_]))
@@ -214,10 +215,11 @@ for i in range(MAX_EPISODES):
         explore = 0.0001
 
     # print(observations, "\n", rewards, "\n", actions, "\n", next_observations, "\n", dones)
-    a_loss, c_loss = ddpg.learn(observations, actions, rewards, next_observations, dones)
+    a_loss, c_loss, act, qua = ddpg.learn(observations, actions, rewards, next_observations, dones)
     if i % 100 == 0:
         flag = True
         print("\nepoch: {}, a_loss: {}, c_loss: {}, explore: {}\n".format(i, a_loss, c_loss, explore))
+        print("action: {}\n, quality: {}".format(act, qua))
 
     run_observation = game.reset()
     for idx in idxs:
@@ -233,7 +235,7 @@ for i in range(MAX_EPISODES):
         run_next_observation, run_reward, run_done = run_action, game_rewards[
             run_observation, run_action], run_action == 5
 
-        game.experience_pool[idx] = [run_observation, run_reward / 100, run_action, run_next_observation,
+        game.experience_pool[idx] = [run_observation, run_reward / 200, run_action, run_next_observation,
                                      run_done]
         if run_done:
             run_observation = game.reset()

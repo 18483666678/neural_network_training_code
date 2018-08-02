@@ -76,7 +76,7 @@ class Game:
 class DDPG(object):
     def __init__(self, a_dim, s_dim):
         # shape(self.memory) : [10000, 1 * 2 + 1 + 1]
-        self.memory = np.zeros((MEMORY_CAPACITY, s_dim * 2 + a_dim + 1), dtype=np.float32)
+        self.memory = np.zeros((MEMORY_CAPACITY, s_dim * 2 + a_dim + 1), dtype=np.int32)
         self.pointer = 0
         self.sess = tf.Session()
 
@@ -87,6 +87,7 @@ class DDPG(object):
 
         with tf.variable_scope('Actor'):
             self.a = self._build_a(self.S, scope='eval', trainable=True)
+            self.action = tf.argmax(self.a, axis=1, name='scaled_a')
             a_ = self._build_a(self.S_, scope='target', trainable=False)
             # print(self.a, a_)
         with tf.variable_scope('Critic'):
@@ -118,7 +119,7 @@ class DDPG(object):
         self.sess.run(tf.global_variables_initializer())
 
     def choose_action(self, s):
-        a = self.sess.run(self.a, {self.S: [s]})[0]
+        a = self.sess.run(self.action, {self.S: [s]})
         # print(a)
         # a = a[0]
         return a
@@ -134,14 +135,22 @@ class DDPG(object):
         br = bt[:, -self.s_dim - 1: -self.s_dim]
         bs_ = bt[:, -self.s_dim:]
 
-        # print("learn:bs {}, ba {}, br {}, bs_ {}".format(bs, ba, br, bs_))
+        # print("learn:bs {}, ba {}, br {}, bs_ {}".format(bs, ba[:, 0], br, bs_))
+        ba_one_hot = np.zeros((BATCH_SIZE, 6))
+        # print(ba_one_hot)
+        # print(np.random.choice(6, BATCH_SIZE))
+        # print(ba[:, 0])
+        ba_one_hot[np.arange(BATCH_SIZE), ba[:, 0]] = 1
+
         a_loss, _ = self.sess.run([self.a_loss, self.atrain], {self.S: bs})
-        c_loss, _ = self.sess.run([self.td_error, self.ctrain], {self.S: bs, self.a: ba, self.R: br, self.S_: bs_})
+        c_loss, _ = self.sess.run([self.td_error, self.ctrain],
+                                  {self.S: bs, self.a: ba_one_hot, self.R: br, self.S_: bs_})
 
         return a_loss, c_loss
 
     def store_transition(self, s, a, r, s_):
         transition = np.hstack(([s], [a], [r], [s_]))
+        # print("zeng>> trans:", s, a, r, s_, transition)
         index = self.pointer % MEMORY_CAPACITY  # replace the old memory with new memory
         self.memory[index, :] = transition
         self.pointer += 1
@@ -151,20 +160,20 @@ class DDPG(object):
             observ = tf.squeeze(tf.one_hot(s, 6), axis=1)
 
             net = tf.layers.dense(observ, 30, activation=tf.nn.relu, name='l1', trainable=trainable)
-            a = tf.layers.dense(net, self.a_dim * 6, activation=tf.nn.tanh, name='a', trainable=trainable)
-            return tf.expand_dims(tf.argmax(a, axis=1, name='scaled_a'), axis=1)
+            a = tf.layers.dense(net, self.a_dim * 6, activation=tf.nn.softmax, name='a', trainable=trainable)
+            return a
 
     def _build_c(self, s, a, scope, trainable):
         with tf.variable_scope(scope):
             observ = tf.squeeze(tf.one_hot(s, 6), axis=1)
             # action = tf.expand_dims(a, axis=1)
-            action = tf.squeeze(tf.one_hot(a, 6), axis=1)
+            # action = tf.squeeze(tf.one_hot(a, 6), axis=1)
 
             n_l1 = 30
             w1_s = tf.get_variable('w1_s', [self.s_dim * 6, n_l1], trainable=trainable)
             w1_a = tf.get_variable('w1_a', [self.a_dim * 6, n_l1], trainable=trainable)
             b1 = tf.get_variable('b1', [1, n_l1], trainable=trainable)
-            net = tf.nn.relu(tf.matmul(observ, w1_s) + tf.matmul(action, w1_a) + b1)
+            net = tf.nn.relu(tf.matmul(observ, w1_s) + tf.matmul(a, w1_a) + b1)
             return tf.layers.dense(net, 1, trainable=trainable)  # Q(s,a)
 
 
@@ -204,13 +213,20 @@ for i in range(MAX_EPISODES):
 
         if ddpg.pointer > MEMORY_CAPACITY:
             a_loss, c_loss = ddpg.learn()
-            if j == MAX_EP_STEPS - 1:
+            if i % 10 == 0 and j == MAX_EP_STEPS - 1:
                 print("a_loss: {}, c_loss: {}".format(a_loss, c_loss))
+
+            if i >= MAX_EPISODES - 50:
+                time.sleep(1)
+                print("{}{}==>".format(s[0], a), end="")
+                if s == [5]:
+                    print("done\n")
+
         s = s_
         ep_reward += r / 100
         if j == MAX_EP_STEPS - 1:
             print('Episode:', i, ' Reward: %i' % int(ep_reward), 'Explore: %.2f' % explore, )
             # if ep_reward > -300:
             #     RENDER = True
-            break
+            # break
 print('Running time: ', time.time() - t1)

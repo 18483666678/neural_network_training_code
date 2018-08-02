@@ -17,7 +17,7 @@ import time
 
 #####################  hyper parameters  ####################
 
-MAX_EPISODES = 200
+MAX_EPISODES = 1000000
 MAX_EP_STEPS = 200
 LR_A = 0.001  # learning rate for actor
 LR_C = 0.002  # learning rate for critic
@@ -84,6 +84,7 @@ class DDPG(object):
         self.S = tf.placeholder(tf.int32, [None, s_dim], 's')
         self.S_ = tf.placeholder(tf.int32, [None, s_dim], 's_')
         self.R = tf.placeholder(tf.float32, [None, 1], 'r')
+        self.done = tf.placeholder(tf.bool, [None], 'd')
 
         with tf.variable_scope('Actor'):
             self.a = self._build_a(self.S, scope='eval', trainable=True)
@@ -108,7 +109,7 @@ class DDPG(object):
         self.soft_replace = [[tf.assign(ta, (1 - TAU) * ta + TAU * ea), tf.assign(tc, (1 - TAU) * tc + TAU * ec)]
                              for ta, ea, tc, ec in zip(self.at_params, self.ae_params, self.ct_params, self.ce_params)]
 
-        q_target = self.R + GAMMA * q_
+        q_target = tf.where(self.done, self.R, self.R + GAMMA * q_)
         # in the feed_dic for the td_error, the self.a should change to actions in memory
         self.td_error = tf.losses.mean_squared_error(labels=q_target, predictions=q)
         self.ctrain = tf.train.AdamOptimizer(LR_C).minimize(self.td_error, var_list=self.ce_params)
@@ -119,32 +120,33 @@ class DDPG(object):
         self.sess.run(tf.global_variables_initializer())
 
     def choose_action(self, s):
-        a = self.sess.run(self.action, {self.S: [s]})
+        a = self.sess.run(self.action, {self.S: [[s]]})[0]
         # print(a)
         # a = a[0]
         return a
 
-    def learn(self):
+    def learn(self, bs, ba, br, bs_, bd):
         # soft target replacement
         self.sess.run(self.soft_replace)
 
-        indices = np.random.choice(MEMORY_CAPACITY, size=BATCH_SIZE)
-        bt = self.memory[indices, :]
-        bs = bt[:, :self.s_dim]
-        ba = bt[:, self.s_dim: self.s_dim + self.a_dim]
-        br = bt[:, -self.s_dim - 1: -self.s_dim]
-        bs_ = bt[:, -self.s_dim:]
+        # indices = np.random.choice(MEMORY_CAPACITY, size=BATCH_SIZE)
+        # bt = self.memory[indices, :]
+        # bs = bt[:, :self.s_dim]
+        # ba = bt[:, self.s_dim: self.s_dim + self.a_dim]
+        # br = bt[:, -self.s_dim - 1: -self.s_dim]
+        # bs_ = bt[:, -self.s_dim:]
 
-        # print("learn:bs {}, ba {}, br {}, bs_ {}".format(bs, ba[:, 0], br, bs_))
+        # print("learn:bs {},\n ba {},\n br {},\n bs_ {},\n bd {}".format(bs, ba, br, bs_, bd))
         ba_one_hot = np.zeros((BATCH_SIZE, 6))
         # print(ba_one_hot)
         # print(np.random.choice(6, BATCH_SIZE))
         # print(ba[:, 0])
+        ba = np.array(ba)
         ba_one_hot[np.arange(BATCH_SIZE), ba[:, 0]] = 1
 
         a_loss, _ = self.sess.run([self.a_loss, self.atrain], {self.S: bs})
         c_loss, _ = self.sess.run([self.td_error, self.ctrain],
-                                  {self.S: bs, self.a: ba_one_hot, self.R: br, self.S_: bs_})
+                                  {self.S: bs, self.a: ba_one_hot, self.R: br, self.S_: bs_, self.done: bd})
 
         return a_loss, c_loss
 
@@ -189,44 +191,54 @@ explore = 0.1  # control exploration
 t1 = time.time()
 
 for i in range(MAX_EPISODES):
-    s = [game.reset()]
-    ep_reward = 0
+    idxs, experiences = game.get_experiences(BATCH_SIZE)
+
+    # print(idxs)
+    # print(experiences)
+
+    observations = []
+    rewards = []
+    actions = []
+    next_observations = []
+    dones = []
+
+    for experience in experiences:
+        observations.append([experience[0]])
+        rewards.append([experience[1]])
+        actions.append([experience[2]])
+        next_observations.append([experience[3]])
+        dones.append(experience[4])
 
     explore -= 0.0001  # decay the action randomness
     if explore < 0.0001:
         explore = 0.0001
 
-    for j in range(MAX_EP_STEPS):
+    # print(observations, "\n", rewards, "\n", actions, "\n", next_observations, "\n", dones)
+    a_loss, c_loss = ddpg.learn(observations, actions, rewards, next_observations, dones)
+    if i % 100 == 0:
+        flag = True
+        print("\nepoch: {}, a_loss: {}, c_loss: {}, explore: {}\n".format(i, a_loss, c_loss, explore))
 
-        # Add exploration noise
+    run_observation = game.reset()
+    for idx in idxs:
+
         if np.random.rand() < explore:
-            a = [np.random.choice(6)]  # add randomness to action selection for exploration
-            # print("zeng>> rand a: ", a, type(a))
-
+            run_action = np.random.randint(0, 6)
         else:
-            a = ddpg.choose_action(s)
-            # print("zeng>> choose a: ", a, type(a))
-        s_, r, done = a, game_rewards[s, a], a == 5
+            run_action = ddpg.choose_action(run_observation)
 
-        # print("zeng>> store, ", s, a, r / 100, s_)
-        ddpg.store_transition(s, a, r / 100, s_)
+        if flag:
+            print("{}[{}]==>".format(run_observation, run_action), end="")
 
-        if ddpg.pointer > MEMORY_CAPACITY:
-            a_loss, c_loss = ddpg.learn()
-            if i % 10 == 0 and j == MAX_EP_STEPS - 1:
-                print("a_loss: {}, c_loss: {}".format(a_loss, c_loss))
+        run_next_observation, run_reward, run_done = run_action, game_rewards[
+            run_observation, run_action], run_action == 5
 
-            if i >= MAX_EPISODES - 50:
-                time.sleep(1)
-                print("{}{}==>".format(s[0], a), end="")
-                if s == [5]:
-                    print("done\n")
-
-        s = s_
-        ep_reward += r / 100
-        if j == MAX_EP_STEPS - 1:
-            print('Episode:', i, ' Reward: %i' % int(ep_reward), 'Explore: %.2f' % explore, )
-            # if ep_reward > -300:
-            #     RENDER = True
-            # break
-print('Running time: ', time.time() - t1)
+        game.experience_pool[idx] = [run_observation, run_reward / 100, run_action, run_next_observation,
+                                     run_done]
+        if run_done:
+            run_observation = game.reset()
+            if flag:
+                print("done")
+        else:
+            run_observation = run_next_observation
+    flag = False

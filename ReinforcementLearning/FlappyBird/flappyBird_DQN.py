@@ -208,9 +208,17 @@ if __name__ == '__main__':
     get_action = net.getAction()
 
     bird = Game()
+    saver = tf.train.Saver()
     init = tf.global_variables_initializer()
     with tf.Session() as sess:
         sess.run(init)
+
+        checkpoint = tf.train.get_checkpoint_state("saved")
+        if checkpoint and checkpoint.model_checkpoint_path:
+            saver.restore(sess, checkpoint.model_checkpoint_path)
+            print("Successfully loaded:", checkpoint.model_checkpoint_path)
+        else:
+            print("Could not find old network weights")
 
         explore = INIT_EXPLORE
         for episode in range(EPISODE_MAX):
@@ -252,6 +260,7 @@ if __name__ == '__main__':
                 explore = 0.0001
             if episode % 100 == 0:
                 print("episode: {}, loss: {}, explore: {}".format(episode, _loss, explore))
+                saver.save(sess, "saved/flappy_bird.ckpt")
 
             # Test and update experiences
             run_observation = bird.reset()

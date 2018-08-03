@@ -162,8 +162,8 @@ class DQNet:
         self.loss = tf.reduce_mean((self.target_q - self.eval_q) ** 2)
         self.optimizer = tf.train.RMSPropOptimizer(learn_rate).minimize(self.loss)
 
-    def getAction(self, observation):
-        action = self.qNet.forward(observation)
+    def getAction(self):
+        action = self.qNet.forward(self.observation)
         return tf.argmax(action)
 
     def copyParams(self):
@@ -181,6 +181,7 @@ if __name__ == '__main__':
     net.forward(GAMMA)
     net.backward(LEARN_RATE)
     copy_params = net.copyParams()
+    get_action = net.getAction()
 
     bird = Game()
     init = tf.global_variables_initializer()

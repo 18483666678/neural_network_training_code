@@ -12,7 +12,7 @@ LEARN_RATE = 0.01
 EPISODE_MAX = 1000000
 EPISODE_STEPS = 200
 BATCH_SIZE = 200
-INIT_EXPLORE = 0.1
+INIT_EXPLORE = 0.3
 MAX_MEMERY = 10000
 SCOPE_EVAL = "eval"
 SCOPE_TARGET = "target"
@@ -42,7 +42,7 @@ class Game:
 
             next_obser, reward, done = self.flappyBird.frame_step(action)
             next_obser = self.preprocess(next_obser)
-            next_observation = np.append(next_obser, observation[:, :, :3], axis=2)
+            next_observation = np.append(observation[:, :, 1:], next_obser, axis=2)
             # plt.clf()
             # plt.subplot(221)
             # plt.imshow(next_observation[:, :, 0])
@@ -93,7 +93,7 @@ class Game:
         return observation
 
     def createNewState(self, obser, next_obser):
-        return np.append(next_obser, obser[:, :, :3], axis=2)
+        return np.append(obser[:, :, 1:], next_obser, axis=2)
 
 
 class ConvNet:
@@ -155,7 +155,7 @@ class ConvNet:
         return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
 
     def getParams(self, scope):
-        return tf.get_collection(tf.GraphKeys.VARIABLES, scope=scope)
+        return tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=scope)
 
 
 class DQNet:
@@ -208,7 +208,7 @@ if __name__ == '__main__':
     get_action = net.getAction()
 
     bird = Game()
-    saver = tf.train.Saver()
+    saver = tf.train.Saver(max_to_keep=4)
     init = tf.global_variables_initializer()
     with tf.Session() as sess:
         sess.run(init)
@@ -242,11 +242,6 @@ if __name__ == '__main__':
             #       np.array(next_observations).shape, np.array(dones).shape)
             # print(observations, rewards, actions, next_observations, dones)
 
-            if episode % 10 == 0:
-                print("----------------- copy param -----------------")
-                sess.run(copy_params)
-                # time.sleep(2)
-
             _loss, _ = sess.run([net.loss, net.optimizer], feed_dict={
                 net.observation: observations,
                 net.action: actions,
@@ -255,12 +250,14 @@ if __name__ == '__main__':
                 net.done: dones
             })
 
-            explore -= 0.0001
+            explore -= 0.00001
             if explore < 0.0001:
                 explore = 0.0001
-            if episode % 100 == 0:
+            if episode % 10 == 0:
+                print("----------------- copy param -----------------")
+                sess.run(copy_params)
                 print("episode: {}, loss: {}, explore: {}".format(episode, _loss, explore))
-                saver.save(sess, "saved/flappy_bird.ckpt")
+                saver.save(sess, "saved/flappy_bird", global_step=episode)
 
             # Test and update experiences
             run_observation = bird.reset()

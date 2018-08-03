@@ -9,6 +9,11 @@ from game import wrapped_flappy_bird
 ACTIONS = 2
 GAMMA = 0.9
 LEARN_RATE = 0.01
+EPISODE_MAX = 1000000
+EPISODE_STEPS = 200
+BATCH_SIZE = 200
+INIT_EXPLORE = 0.1
+MAX_MEMERY = 10000
 SCOPE_EVAL = "eval"
 SCOPE_TARGET = "target"
 
@@ -27,7 +32,7 @@ class Game:
         observation = np.stack((obser, obser, obser, obser), axis=2)  # shape(80, 80, 4)
 
         # plt.ion()
-        for i in range(10000):
+        for i in range(MAX_MEMERY):
             if i % 5 == 0:
                 index = np.random.randint(0, 2)
                 action = np.zeros([2])
@@ -70,7 +75,25 @@ class Game:
         return np.reshape(observation, (80, 80, 1))
 
     def frame_step(self, action):
-        return self.flappyBird.frame_step(action)
+        obser, reward, done = self.flappyBird.frame_step(action)
+        observation = self.preprocess(obser)
+
+        return observation, reward, done
+
+    def reset(self):
+        # get the first state by doing random action and preprocess the image to 80x80x4
+        index = np.random.randint(0, ACTIONS)
+        action = np.zeros(ACTIONS)
+        action[index] = 1
+        obser, reward, done = self.flappyBird.frame_step(action)
+        obser = cv2.cvtColor(cv2.resize(obser, (80, 80)), cv2.COLOR_BGR2GRAY)
+        ret, obser = cv2.threshold(obser, 1, 255, cv2.THRESH_BINARY)
+        observation = np.stack((obser, obser, obser, obser), axis=2)  # shape(80, 80, 4)
+
+        return observation
+
+    def createNewState(self, obser, next_obser):
+        return np.append(next_obser, obser[:, :, :3], axis=2)
 
 
 class ConvNet:
@@ -99,16 +122,16 @@ class ConvNet:
         # hidden layers
         h_conv1 = tf.nn.relu(self.conv2d(observation, self.W_conv1, 4) + self.b_conv1)
         h_pool1 = self.max_pool_2x2(h_conv1)
-        print("h_conv1", h_conv1)  # shape(N, 20, 20, 32)
-        print("h_pool", h_pool1)  # shape(N, 10, 10, 32)
+        # print("h_conv1", h_conv1)  # shape(N, 20, 20, 32)
+        # print("h_pool", h_pool1)  # shape(N, 10, 10, 32)
 
         h_conv2 = tf.nn.relu(self.conv2d(h_pool1, self.W_conv2, 2) + self.b_conv2)
         h_conv3 = tf.nn.relu(self.conv2d(h_conv2, self.W_conv3, 1) + self.b_conv3)
-        print("h_conv2", h_conv2)  # shape(N, 5, 5, 64)
-        print("h_conv3", h_conv3)  # shape(N, 5, 5, 64)
+        # print("h_conv2", h_conv2)  # shape(N, 5, 5, 64)
+        # print("h_conv3", h_conv3)  # shape(N, 5, 5, 64)
 
         h_conv3_flat = tf.reshape(h_conv3, [-1, 1600])
-        print("h_conv3_flat", h_conv3_flat)  # shape(N, 1600)
+        # print("h_conv3_flat", h_conv3_flat)  # shape(N, 1600)
 
         h_fc1 = tf.nn.relu(tf.matmul(h_conv3_flat, self.W_fc1) + self.b_fc1)
 
@@ -139,6 +162,7 @@ class DQNet:
 
     def __init__(self):
         # input layer
+        self.currentState = tf.placeholder(dtype=tf.float32, shape=[None, 80, 80, 4])
         self.observation = tf.placeholder(dtype=tf.float32, shape=[None, 80, 80, 4])
         self.action = tf.placeholder(dtype=tf.float32, shape=[None, 2])  # one_hot mode
         self.reward = tf.placeholder(dtype=tf.float32, shape=[None, 1])
@@ -151,7 +175,7 @@ class DQNet:
     def forward(self, discount):
         self.eval_qs = self.qNet.forward(self.observation)
         self.eval_q = tf.expand_dims(tf.reduce_sum(tf.multiply(self.eval_qs, self.action), axis=1), axis=1)
-        print("self.eval_q", self.eval_q)  # shape(N, 1)
+        # print("self.eval_q", self.eval_q)  # shape(N, 1)
 
         self.next_qs = self.targetQNet.forward(self.next_observation)
         self.next_q = tf.expand_dims(tf.reduce_max(self.next_qs, axis=1), axis=1)
@@ -163,8 +187,8 @@ class DQNet:
         self.optimizer = tf.train.RMSPropOptimizer(learn_rate).minimize(self.loss)
 
     def getAction(self):
-        action = self.qNet.forward(self.observation)
-        return tf.argmax(action)
+        action = self.qNet.forward(self.currentState)
+        return tf.argmax(action, axis=1)
 
     def copyParams(self):
         eval_params = self.qNet.getParams(SCOPE_EVAL)
@@ -187,3 +211,70 @@ if __name__ == '__main__':
     init = tf.global_variables_initializer()
     with tf.Session() as sess:
         sess.run(init)
+
+        explore = INIT_EXPLORE
+        for episode in range(EPISODE_MAX):
+            idxs, experiences = bird.get_experiences(BATCH_SIZE)
+
+            observations = []
+            rewards = []
+            actions = []
+            next_observations = []
+            dones = []
+
+            for experience in experiences:
+                observations.append(experience[0])
+                rewards.append([experience[1]])
+                actions.append(experience[2])
+                next_observations.append(experience[3])
+                dones.append(experience[4])
+
+            # # shape: (2, 80, 80, 4) (2, 1) (2, 2) (2, 80, 80, 4) (2,)
+            # print(np.array(observations).shape, np.array(rewards).shape, np.array(actions).shape,
+            #       np.array(next_observations).shape, np.array(dones).shape)
+            # print(observations, rewards, actions, next_observations, dones)
+
+            if episode % 10 == 0:
+                print("----------------- copy param -----------------")
+                sess.run(copy_params)
+                # time.sleep(2)
+
+            _loss, _ = sess.run([net.loss, net.optimizer], feed_dict={
+                net.observation: observations,
+                net.action: actions,
+                net.reward: rewards,
+                net.next_observation: next_observations,
+                net.done: dones
+            })
+
+            explore -= 0.0001
+            if explore < 0.0001:
+                explore = 0.0001
+            if episode % 100 == 0:
+                print("episode: {}, loss: {}, explore: {}".format(episode, _loss, explore))
+
+            # Test and update experiences
+            run_observation = bird.reset()
+            # # shape: (80, 80, 4)
+            # print(run_observation.shape)
+            # print(run_observation)
+
+            for step in range(EPISODE_STEPS):
+
+                if np.random.rand() < explore:
+                    run_action = np.random.randint(0, 2)
+                else:
+                    run_action = sess.run(get_action, feed_dict={
+                        net.currentState: [run_observation]
+                    })[0]
+                one_hot_action = np.zeros(ACTIONS)
+                one_hot_action[run_action] = 1
+                run_next_observation, run_reward, run_done = bird.frame_step(one_hot_action)
+                run_next_observation = bird.createNewState(run_observation, run_next_observation)
+                # print("act:\n{}, \nobser:\n{}, \nrew:\n{}, \ndo:\n{}"
+                #       .format(one_hot_action, run_next_observation, run_reward, run_done))
+                # time.sleep(10)
+                del bird.experience_pool[0]
+                bird.experience_pool.append([run_observation, run_reward, one_hot_action, run_next_observation,
+                                             run_done])
+                run_observation = run_next_observation

@@ -7,13 +7,13 @@ import matplotlib.pyplot as plt
 from game import wrapped_flappy_bird
 
 ACTIONS = 2
-GAMMA = 0.9
-LEARN_RATE = 0.01
-EPISODE_MAX = 1000000
-EPISODE_STEPS = 200
-BATCH_SIZE = 200
-INIT_EXPLORE = 0.3
-MAX_MEMERY = 10000
+GAMMA = 0.99
+LEARN_RATE = 1e-6
+EPISODE_MAX = 1000000000
+EPISODE_STEPS = 1
+BATCH_SIZE = 32
+INIT_EXPLORE = 0.2
+MAX_MEMERY = 5000
 SCOPE_EVAL = "eval"
 SCOPE_TARGET = "target"
 
@@ -184,7 +184,8 @@ class DQNet:
 
     def backward(self, learn_rate):
         self.loss = tf.reduce_mean((self.target_q - self.eval_q) ** 2)
-        self.optimizer = tf.train.RMSPropOptimizer(learn_rate).minimize(self.loss)
+        tf.summary.scalar("DQN loss", self.loss)
+        self.optimizer = tf.train.AdamOptimizer(learn_rate).minimize(self.loss)
 
     def getAction(self):
         action = self.qNet.forward(self.currentState)
@@ -209,9 +210,11 @@ if __name__ == '__main__':
 
     bird = Game()
     saver = tf.train.Saver(max_to_keep=4)
+    merged = tf.summary.merge_all()
     init = tf.global_variables_initializer()
     with tf.Session() as sess:
         sess.run(init)
+        writer = tf.summary.FileWriter("./logs", sess.graph)
 
         checkpoint = tf.train.get_checkpoint_state("saved")
         if checkpoint and checkpoint.model_checkpoint_path:
@@ -221,6 +224,8 @@ if __name__ == '__main__':
             print("Could not find old network weights")
 
         explore = INIT_EXPLORE
+        run_observation = bird.reset()
+
         for episode in range(EPISODE_MAX):
             idxs, experiences = bird.get_experiences(BATCH_SIZE)
 
@@ -242,7 +247,7 @@ if __name__ == '__main__':
             #       np.array(next_observations).shape, np.array(dones).shape)
             # print(observations, rewards, actions, next_observations, dones)
 
-            _loss, _ = sess.run([net.loss, net.optimizer], feed_dict={
+            summary, _loss, _ = sess.run([merged, net.loss, net.optimizer], feed_dict={
                 net.observation: observations,
                 net.action: actions,
                 net.reward: rewards,
@@ -250,17 +255,18 @@ if __name__ == '__main__':
                 net.done: dones
             })
 
+            writer.add_summary(summary, episode)
+
             explore -= 0.00001
             if explore < 0.0001:
                 explore = 0.0001
-            if episode % 10 == 0:
+            if episode % 100 == 0:
                 print("----------------- copy param -----------------")
                 sess.run(copy_params)
                 print("episode: {}, loss: {}, explore: {}".format(episode, _loss, explore))
                 saver.save(sess, "saved/flappy_bird", global_step=episode)
 
             # Test and update experiences
-            run_observation = bird.reset()
             # # shape: (80, 80, 4)
             # print(run_observation.shape)
             # print(run_observation)

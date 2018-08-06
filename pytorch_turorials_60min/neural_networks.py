@@ -40,7 +40,10 @@ print(net)
 params = list(net.parameters())
 # print(params)
 print(len(params))
-print(params[0].size())  # conv1's weight
+# print(params[0].size())  # conv1's weight
+
+for param in params:
+    print(param.size())
 
 input = torch.randn(1, 1, 32, 32)
 out = net(input)
@@ -48,3 +51,44 @@ print(out)
 
 net.zero_grad()
 out.backward(torch.randn(1, 10))
+
+print("\nLoss Function:")
+output = net(input)
+target = torch.randn(10)  # a dummy target, for example
+target = target.view(1, -1)  # make it the same shape as output
+criterion = nn.MSELoss()
+
+loss = criterion(output, target)
+print(loss)
+print(loss.grad_fn)
+
+print(loss.grad_fn.next_functions[0][0])  # Linear
+print(loss.grad_fn.next_functions[0][0].next_functions[0][0])  # ReLU
+
+print("\nBackprop:")
+net.zero_grad()
+
+print("conv1.bias.grad before backward")
+print(net.conv1.bias.grad)
+
+loss.backward()
+print("conv1.bias.grad after backward")
+print(net.conv1.bias.grad)
+
+# learning_rate = 0.01
+# for f in net.parameters():
+#     f.data.sub_(f.grad.data * learning_rate)
+#     # print(f.data)
+#     # print(f.grad.data)
+
+import torch.optim as optim
+
+# create your optimizer
+optimizer = optim.SGD(net.parameters(), lr=0.01)
+
+# in your training loop:
+optimizer.zero_grad()  # zero the gradient buffers
+output = net(input)
+loss = criterion(output, target)
+loss.backward()
+optimizer.step()  # Does the update

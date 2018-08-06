@@ -11,9 +11,9 @@ GAMMA = 0.99
 LEARN_RATE = 1e-6
 EPISODE_MAX = 1000000000
 EPISODE_STEPS = 1
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 INIT_EXPLORE = 0.2
-MAX_MEMERY = 5000
+MAX_MEMERY = 10000
 SCOPE_EVAL = "eval"
 SCOPE_TARGET = "target"
 
@@ -260,9 +260,12 @@ if __name__ == '__main__':
             explore -= 0.00001
             if explore < 0.0001:
                 explore = 0.0001
-            if episode % 100 == 0:
-                print("----------------- copy param -----------------")
+
+            if episode % 10:
+                # print("----------------- copy param -----------------")
                 sess.run(copy_params)
+
+            if episode % 100 == 0:
                 print("episode: {}, loss: {}, explore: {}".format(episode, _loss, explore))
                 saver.save(sess, "saved/flappy_bird", global_step=episode)
 

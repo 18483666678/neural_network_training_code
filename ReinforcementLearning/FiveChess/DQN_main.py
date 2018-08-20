@@ -19,7 +19,7 @@ BATCH_SIZE = 200  # 小批量尺寸
 TARGET_Q_STEP = 100  # 目标网络同步的训练次数
 
 
-class DQN():
+class DQN:
     # DQN Agent
     def __init__(self, env):
         # init experience replay
@@ -31,6 +31,12 @@ class DQN():
         self.state_dim = self.SIZE * self.SIZE + 1
         self.action_dim = self.SIZE * self.SIZE
         self.hide_layer_inputs = 52
+
+        # input layer
+        self.state_input = tf.placeholder("float", [None, self.state_dim])
+        self.action_input = tf.placeholder("float", [None, self.action_dim])  # one hot presentation
+        self.y_input = tf.placeholder("float", [None])
+
         # 创建Q网络
         self.create_Q_network()
         # 创建训练方法
@@ -49,12 +55,12 @@ class DQN():
         b1 = self.bias_variable([self.hide_layer_inputs])
         W2 = self.weight_variable([self.hide_layer_inputs, self.action_dim])
         b2 = self.bias_variable([self.action_dim])
-        # input layer
-        self.state_input = tf.placeholder("float", [None, self.state_dim])
+
         # hidden layers
         h_layer = tf.nn.relu(tf.matmul(self.state_input, W1) + b1)
         # Q Value layer
         self.Q_value = tf.matmul(h_layer, W2) + b2
+
         # 保存权重
         self.Q_Weihgts = [W1, b1, W2, b2]
 
@@ -64,12 +70,12 @@ class DQN():
         b1 = self.bias_variable([self.hide_layer_inputs])
         W2 = self.weight_variable([self.hide_layer_inputs, self.action_dim])
         b2 = self.bias_variable([self.action_dim])
-        # input layer
-        # self.state_input = tf.placeholder("float",[None,self.state_dim])
+
         # hidden layers
         h_layer = tf.nn.relu(tf.matmul(self.state_input, W1) + b1)
         # Q Value layer
         self.TargetQ_value = tf.matmul(h_layer, W2) + b2
+
         self.TargetQ_Weights = [W1, b1, W2, b2]
 
     def copyWeightsToTarget(self):
@@ -77,9 +83,6 @@ class DQN():
             self.session.run(tf.assign(self.TargetQ_Weights[i], self.Q_Weihgts[i]))
 
     def create_training_method(self):
-        self.action_input = tf.placeholder("float", [None, self.action_dim])  # one hot presentation
-        self.y_input = tf.placeholder("float", [None])
-
         Q_action = tf.reduce_sum(tf.multiply(self.Q_value, self.action_input), reduction_indices=1)  # mul->matmul
         self.cost = tf.reduce_mean(tf.square(self.y_input - Q_action))
         self.optimizer = tf.train.AdamOptimizer(0.0001).minimize(self.cost)
@@ -197,14 +200,12 @@ def main():
         camp = -1
         state = np.reshape(state, [-1])
         state = np.append(state, camp)
-
-        print('episode ', episode)
+        print('episode:', episode)
 
         # Train
         for step in range(STEP):
             # 自己下一步棋
             action = agent.egreedy_action(state)  # e-greedy action for train
-
             action = [math.floor(action / SIZE), action % SIZE, camp]
             # if env.env.is_valid_set_coord(action[0],action[1]):
             next_state, reward, done, _ = env.step(action)
@@ -219,8 +220,9 @@ def main():
             agent.perceive(state, action, reward, next_state, done)
             state = next_state
             if done:
-                print('done step ', step)
+                print('done step:', step)
                 break
+
         # Test every 100 episodes
         if episode % 100 == 99:
             total_reward = 0
@@ -233,7 +235,6 @@ def main():
                 for j in range(STEP):
                     env.render()
                     action = agent.action(state)  # direct action for test
-
                     action = [math.floor(action / SIZE), action % SIZE, camp]
                     state, reward, done, _ = env.step(action)
                     state = np.reshape(state, [-1])
@@ -246,14 +247,14 @@ def main():
                     total_reward += reward
                     time.sleep(0.5)
                     if done:
-                        env.render()
+                        # env.render()
                         print('done')
                         time.sleep(3)
                         break
             ave_reward = total_reward / TEST
-            print('episode: ', episode, 'Evaluation Average Reward:', ave_reward)
+            print('episode:', episode, ', Evaluation Average Reward:', ave_reward)
         # if ave_reward >= 990:
-        #	break
+        #     break
 
 
 if __name__ == '__main__':

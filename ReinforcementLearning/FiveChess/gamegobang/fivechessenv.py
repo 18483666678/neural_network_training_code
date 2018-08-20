@@ -7,6 +7,7 @@ import logging
 import numpy
 import random
 from gym import spaces
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -280,3 +281,37 @@ class FiveChessEnv(gym.Env):
 
     # if self.state is None: return None
     # return super().render(mode)
+
+
+if __name__ == '__main__':
+    game = FiveChessEnv()
+    game.reset()
+    # Assume the first player is 1 (white)
+    player = 1
+
+    while True:
+        game.render()
+
+        # Make random action
+        action = [0, 0, 0]
+        valid_pos = []
+        valid = game.get_valid_pos_weights()
+        for i in range(len(valid)):
+            if valid[i] == 1:
+                valid_pos.append(i)
+        act = random.choice(valid_pos)
+        action[0], action[1] = act // game.SIZE, act % game.SIZE
+        action[2] = player
+
+        # Exchange player
+        if player == 1:
+            player = -1
+        else:
+            player = 1
+
+        # Judgement result
+        _, _, win, _ = game.step(action)
+        if win:
+            game.reset()
+
+        time.sleep(1)

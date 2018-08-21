@@ -1,22 +1,24 @@
 import numpy as np
 
-width = height = 8
+width = 6
+height = 10
 n_in_row = 5
 player1 = 1
 player2 = -1
 
 
-def is_n_in_row(state):
+def is_n_in_row(state, height, width, n_in_row):
     if np.sum(state) >= n_in_row:
-        for x in range(width - n_in_row + 1):
-            for y in range(height - n_in_row + 1):
-                section = state[x:x + n_in_row, y:y + n_in_row]
+        for h in range(height - n_in_row + 1):
+            for w in range(width - n_in_row + 1):
+                section = state[h:h + n_in_row, w:w + n_in_row]
                 # print("========\n", section, np.sum(section))
                 if np.sum(section) >= n_in_row:
                     if np.max([np.dot(section, np.transpose(section)),
                                np.dot(np.transpose(section), section)]) == n_in_row \
                             or np.sum(section[list(range(n_in_row)), list(range(n_in_row))]) == n_in_row \
                             or np.sum(section[list(range(n_in_row)), list(range(n_in_row - 1, -1, -1))]) == n_in_row:
+                        print("Range:\n  H: [{} ~ {}), W: [{} ~ {})".format(h, h + n_in_row, w, w + n_in_row))
                         return True
     return False
 
@@ -24,19 +26,23 @@ def is_n_in_row(state):
 def getResult(state):
     state_1 = np.where(state == player1, 1, 0)
     state_2 = np.where(state == player2, 1, 0)
-    if is_n_in_row(state_1):
+    if is_n_in_row(state_1, height, width, n_in_row):
         print("Player {} has {} in a row".format(player1, n_in_row))
-    elif is_n_in_row(state_2):
+    elif is_n_in_row(state_2, height, width, n_in_row):
         print("Player {} has {} in a row".format(player2, n_in_row))
     else:
-        print(np.sum([state_1, state_2]), width * height)
+        print(np.sum([state_1, state_2]), height * width)
 
 
 # board = np.zeros((width, height))
 # board = np.ones((width, height))
-board = np.random.randint(-1, 2, width * height).reshape(width, height)
+board = np.random.randint(-1, 2, height * width).reshape(height, width)
 print(board)
 getResult(board)
+
+# chess = board.tolist()
+# print(np.where(np.array(chess) != 0, 1, 0))
+# print(np.sum(np.where(np.array(chess) != 0, 1, 0)))
 
 #
 # Below is some test code for debug

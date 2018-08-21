@@ -9,6 +9,7 @@ import random
 from gym import spaces
 import time
 import numpy as np
+import copy
 from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
 
@@ -23,24 +24,35 @@ class FiveChessEnv(gym.Env):
 
     def __init__(self):
         # 棋盘大小
-        self.SIZE = 8
+        self.SIZE = 4
         # 初始棋盘是0    -1表示黑棋子   1表示白棋子
         self.chessboard = [[0 for v in range(self.SIZE)] for v in range(self.SIZE)]
-        self.player1 = 1
-        self.player2 = -1
+        self.playerJustMoved = -1
         self.viewer = None
-        self.step_count = 0
-        self.n_in_row = 5
+        # self.step_count = 0
+        self.n_in_row = 3
 
     # def seed(self, seed=None):
     #     self.np_random, seed = seeding.np_random(seed)
     #     return [seed]
+
+    def Clone(self):
+        """ Create a deep clone of this game state.
+        """
+        st = FiveChessEnv()
+        st.playerJustMoved = self.playerJustMoved
+        st.chessboard = copy.deepcopy(self.chessboard)
+        return st
 
     def is_valid_coord(self, x, y):
         return x >= 0 and x < self.SIZE and y >= 0 and y < self.SIZE
 
     def is_valid_set_coord(self, x, y):
         return self.is_valid_coord(x, y) and self.chessboard[x][y] == 0
+
+    def exchange_player(self):
+        self.playerJustMoved = 0 - self.playerJustMoved
+        return True
 
     # 返回一个有效的下棋位置
     def get_valid_pos_weights(self):
@@ -53,8 +65,18 @@ class FiveChessEnv(gym.Env):
                     results.append(0)
         return results
 
+    def GetMoves(self):
+        """ Get all possible moves from this state.
+        """
+        valid_pos = []
+        valid = self.get_valid_pos_weights()
+        for i in range(len(valid)):
+            if valid[i] == 1:
+                valid_pos.append(i)
+        return valid_pos
+
     def is_n_in_row(self, state, height, width, n_in_row):
-        print(height, width, n_in_row, "\n", state)
+        # print(height, width, n_in_row, "\n", state)
         if np.sum(state) >= n_in_row:
             for y in range(height - n_in_row + 1):
                 for x in range(width - n_in_row + 1):
@@ -79,13 +101,12 @@ class FiveChessEnv(gym.Env):
         # 棋子
         self.chessboard[action[0]][action[1]] = action[2]
 
-        self.step_count += 1
+        # self.step_count += 1
+        # # 胜负判定
+        # color = action[2]
 
-        # 胜负判定
-        color = action[2]
-
-        win_reward = 1000
-        common_reward = -20
+        win_reward = 1.0
+        common_reward = -2.0
         draw_reward = 0
 
         x, y = action[0], action[1]
@@ -107,11 +128,11 @@ class FiveChessEnv(gym.Env):
 
         action_state = np.where(section == action[2], 1, 0)
         if self.is_n_in_row(action_state, section.shape[0], section.shape[1], self.n_in_row):
-            print("Player {} ({}, {}) has {} in a row".format(action[2], action[0], action[1], self.n_in_row))
+            # print("Player {} ({}, {}) has {} in a row".format(action[2], action[0], action[1], self.n_in_row))
             return self.chessboard, win_reward, True, {}
         else:
             if np.sum(np.where(np.array(self.chessboard) != 0, 1, 0)) == self.SIZE * self.SIZE:
-                print("Game draw")
+                # print("Game draw")
                 return self.chessboard, draw_reward, True, {}
 
         return self.chessboard, common_reward, False, {}
@@ -270,7 +291,7 @@ class FiveChessEnv(gym.Env):
 
     def reset(self):
         self.chessboard = [[0 for v in range(self.SIZE)] for v in range(self.SIZE)]
-        self.step_count = 0
+        # self.step_count = 0
         return self.chessboard
 
     def render(self, mode='human', close=False):

@@ -247,7 +247,7 @@ def main():
                     total_reward += reward
                     time.sleep(0.5)
                     if done:
-                        # env.render()
+                        env.render()
                         print('done')
                         time.sleep(3)
                         break

@@ -164,7 +164,7 @@ def UCT(rootstate, itermax, verbose=False):
             _, reward, win, _ = state.step(action)
             if win:
                 over = True
-                state.reset()
+                # state.reset()
 
         # Expand
         if node.untriedMoves != [] and not over:  # if we can expand (i.e. state/node is non-terminal)
@@ -174,9 +174,8 @@ def UCT(rootstate, itermax, verbose=False):
             _, reward, win, _ = state.step(action)
             if win:
                 over = True
-                state.reset()
-            else:
-                node = node.AddChild(m, state)  # add child and descend tree
+                # state.reset()
+            node = node.AddChild(m, state)  # add child and descend tree
 
         # Rollout - this can often be made orders of magnitude quicker using a state.GetRandomMove() function
         while state.GetMoves() != [] and not over:  # while state is non-terminal
@@ -186,7 +185,7 @@ def UCT(rootstate, itermax, verbose=False):
             _, reward, win, _ = state.step(action)
             if win:
                 over = True
-                state.reset()
+                # state.reset()
 
         # Backpropagate
         while node != None:  # backpropagate from the expanded node and work back to the root node

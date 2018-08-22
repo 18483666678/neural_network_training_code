@@ -81,13 +81,16 @@ for epoch in range(2):  # loop over the dataset multiple times
     running_loss = 0.0
     for i, data in enumerate(trainloader, 0):
         # get teh inputs
-        input, labels = data
+        inputs, labels = data
+
         # zero the parameter gradients
         optimizer.zero_grad()
 
         # forward + backward + optimize
-        outputs = net(input)
+        outputs = net(inputs)
+
         loss = criterion(outputs, labels)
+
         loss.backward()
         optimizer.step()
 
@@ -109,7 +112,9 @@ imshow(torchvision.utils.make_grid(images))
 plt.show()
 print('GroundTruth: ', ' '.join('%5s' % classes[labels[j]] for j in range(4)))
 outputs = net(images)
+
 _, predicted = torch.max(outputs, 1)
+
 print("Predicted: ", " ".join("%5s" % classes[predicted[j]] for j in range(4)))
 
 correct = 0
@@ -118,9 +123,15 @@ with torch.no_grad():
     for data in testloader:
         images, labels = data
         outputs = net(images)
-        _, predicted = torch.max(outputs.data, 1)
+        pre_num, predicted = torch.max(outputs.data, 1)
         total += labels.size(0)
         correct += (predicted == labels).sum().item()
+        print("data:", data, type(data))
+        print("images", images, type(images))
+        print("labels:", labels, labels.size, type(labels))
+        print("predicted:", pre_num, predicted, type(pre_num))
+        print("total", total)
+        exit()
 
 print("Accuracy of the network on the 10000 test images: %d %%" % (
         100 * correct / total
@@ -149,6 +160,5 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Assume that we are on a CUDA  machine, then this should print a CUDA device:
 print(device)
-net.to(device)
-
-inputs, labels = input.to(device), labels.to(device)
+# net.to(device)
+# inputs, labels = inputs.to(device), labels.to(device)

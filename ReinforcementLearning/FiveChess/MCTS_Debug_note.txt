@@ -1,0 +1,58 @@
+Author: lichen_zeng@sina.cn
+Date: 20180822
+Subject: MCTS Debug心得总结
+
+
+1, 采用矩阵相关的性质来判断是否五子连成一条线
+在0-1矩阵中， 该矩阵 点乘
+if np.max([np.dot(section, np.transpose(section)),
+           np.dot(np.transpose(section), section)]) == n_in_row \
+        or np.sum(section[list(range(n_in_row)), list(range(n_in_row))]) == n_in_row \
+        or np.sum(section[list(range(n_in_row)), list(range(n_in_row - 1, -1, -1))]) == n_in_row:
+
+
+2, 零合游戏
+win_reward = 1.0
+common_reward = -2.0
+draw_reward = 0
+
+
+3, Back propagation 阶段按角色更新 win 值，所以在 select 阶段 直接选择 UCB 最大的一个动作即可； -- 已经测试，正确有效
+
+  若Back propagation 阶段统一更新所有父节点 win 值，且满足得分为 零合 的前提，则相关选手的UCB计算公司如下：  -- 未测试验证
+   当前选手的UCB计算: wins(i)/visits(i) + sqrt(log(visits(i-1)/visits(i)))  # i 代表当前节点， i-1 代表父节点
+   对手的UCB计算: 1 - wins(i)/visits(i) + sqrt(log(visits(i-1)/visits(i)))
+class Node:
+
+    def Update(self, result):
+        """ Update this node - one additional visit and result additional wins. result must be from the viewpoint of playerJustmoved.
+        """
+        self.visits += 1
+        self.wins += result
+
+
+4, 进行MCTS模拟时，不用更改了 rootstate，所以可以用 深度拷贝等 复制 方式。
+
+def UCT(rootstate, itermax, verbose=False):
+        state = rootstate.Clone()
+
+
+5, 可以巧妙的运用 1, 0, -1 的数字特点，如 -1 * -1 = 1, 0 * 1 = 0, -1 * 1 = -1
+def UCT(rootstate, itermax, verbose=False):
+
+            node.Update(node.playerJustMoved * action[2] * reward)
+
+
+6, 进行Expand时，如果走某个棋子（节点）就赢了，依然需要将该棋子（节点）加入 模特卡洛树中，让其模拟成功的次数 和 访问次数。
+def UCT(rootstate, itermax, verbose=False):
+
+        # Expand
+        if node.untriedMoves != [] and not over:  # if we can expand (i.e. state/node is non-terminal)
+            m = random.choice(node.untriedMoves)
+            state.exchange_player()
+            action[0], action[1], action[2] = m // state.SIZE, m % state.SIZE, state.playerJustMoved
+            _, reward, win, _ = state.step(action)
+            if win:
+                over = True
+                # state.reset()
+            node = node.AddChild(m, state)  # add child and descend tree

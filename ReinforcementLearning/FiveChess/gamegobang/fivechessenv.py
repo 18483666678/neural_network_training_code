@@ -24,13 +24,13 @@ class FiveChessEnv(gym.Env):
 
     def __init__(self):
         # 棋盘大小
-        self.SIZE = 4
+        self.SIZE = 6
         # 初始棋盘是0    -1表示黑棋子   1表示白棋子
         self.chessboard = [[0 for v in range(self.SIZE)] for v in range(self.SIZE)]
         self.playerJustMoved = -1
         self.viewer = None
         # self.step_count = 0
-        self.n_in_row = 3
+        self.n_in_row = 4
 
     # def seed(self, seed=None):
     #     self.np_random, seed = seeding.np_random(seed)

@@ -158,7 +158,7 @@ def UCT(rootstate, itermax, verbose=False):
         # Select
         while node.untriedMoves == [] and node.childNodes != []:  # node is fully expanded and non-terminal
             node = node.UCTSelectChild()
-            print("playerJustMoved: node: {}, state: {}".format(node.playerJustMoved, state.playerJustMoved))
+            # print("playerJustMoved: node: {}, state: {}".format(node.playerJustMoved, state.playerJustMoved))
             state.exchange_player()
             action[0], action[1], action[2] = node.move // state.SIZE, node.move % state.SIZE, state.playerJustMoved
             _, reward, win, _ = state.step(action)

@@ -3,7 +3,7 @@ import tensorflow.examples.tutorials.mnist.input_data as input_data
 import numpy as np
 import matplotlib.pyplot as plt
 
-mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
+mnist = input_data.read_data_sets("../MNIST_data/", one_hot=True)
 
 
 class GNet:
